@@ -124,7 +124,7 @@ class DataGenerator(object):
 
         # SOLUTION:
         n= self.num_classes
-        k=self.num_samples_per_class
+        k= self.num_samples_per_class
 
         images=torch.zeros(batch_size,k+1,n,784)
         labels=torch.zeros(batch_size,k+1,n,n)
@@ -146,7 +146,7 @@ class DataGenerator(object):
                 img = image_file_to_array(img,784)
                 images[i,k,j] = torch.from_numpy(img)
                 labels[i,k,j] = torch.from_numpy(label)
-                
+
         return images, labels
                 
 

@@ -33,19 +33,19 @@ class MANN(nn.Module):
         initialize_weights(self.layer1)
         initialize_weights(self.layer2)
         
-        # self.dnc = DNC(
-        #                input_size=num_classes + input_size,
-        #                output_size=num_classes,
-        #                hidden_size=model_size,
-        #                rnn_type='lstm',
-        #                num_layers=1,
-        #                num_hidden_layers=1,
-        #                nr_cells=num_classes,
-        #                cell_size=64,
-        #                read_heads=1,
-        #                batch_first=True,
-        #                gpu_id=0,
-        #                )
+        self.dnc = DNC(
+                       input_size=num_classes + input_size,
+                       output_size=num_classes,
+                       hidden_size=model_size,
+                       rnn_type='lstm',
+                       num_layers=1,
+                       num_hidden_layers=1,
+                       nr_cells=num_classes,
+                       cell_size=64,
+                       read_heads=1,
+                       batch_first=True,
+                       gpu_id=-1, # set to 0 if gpu is available
+                       )
 
     def forward(self, input_images, input_labels):
         """
@@ -70,11 +70,15 @@ class MANN(nn.Module):
         
         labels = torch.cat((input_labels[:,:-1,:,:],torch.zeros_like(input_labels[:,-1:,:,:])),dim=1)
         input = torch.cat((input_images, labels), dim=3).reshape((B, N*K_1, D+N))
-
-        x, _ = self.layer1(input)
-        x, _ = self.layer2(x)
-        # out = self.dnc(x)
-        out=x
+        
+        #LSTM
+        # x, _ = self.layer1(input)
+        # x, _ = self.layer2(x)
+        # out = x
+        
+        #Comment LSTM layers and Uncomment below to use DNC 
+        out, _ = self.dnc(input)
+        
         out = torch.reshape(out, (B, K_1, N,N))
         return out
 
@@ -96,13 +100,13 @@ class MANN(nn.Module):
         #############################
 
         # SOLUTION: 
+        B, _ , N, _ = preds.shape
         loss = torch.nn.CrossEntropyLoss()   
-        
-        preds = preds[:, -1][0]
-        labels = torch.argmax(labels[:, -1][0], dim= 1)
-        
-        # print(preds.shape)
-        return loss(preds,labels).sum()
+    
+        preds = preds[:, -1].squeeze().reshape((-1,N))
+        labels = torch.argmax(labels[:, -1], dim=1).reshape((B*N,))
+
+        return loss(preds,labels)
             
 
 def train_step(images, labels, model, optim):
@@ -122,6 +126,7 @@ def model_eval(images, labels, model):
 
 
 def main(config):
+
     # device = torch.device("cuda")
     device = torch.device("cpu")
     writer = SummaryWriter(config.logdir)
@@ -159,7 +164,9 @@ def main(config):
                                         config.num_classes])
             pred = torch.argmax(pred[:, -1, :, :], axis=2)
             labels = torch.argmax(labels[:, -1, :, :], axis=2)
-            
+            loss_train = train_loss.cpu().numpy()
+            test_acc = pred.eq(labels).double().mean().item()
+            print(f"Train loss:{loss_train}, Meta-test accuracy: {test_acc}")
             writer.add_scalar('Train Loss', train_loss.cpu().numpy(), step)
             writer.add_scalar('Test Loss', test_loss.cpu().numpy(), step)
             writer.add_scalar('Meta-Test Accuracy', 
@@ -168,7 +175,7 @@ def main(config):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_classes', type=int, default=5)
+    parser.add_argument('--num_classes', type=int, default=2)
     parser.add_argument('--num_samples', type=int, default=1)
     parser.add_argument('--meta_batch_size', type=int, default=128)
     parser.add_argument('--logdir', type=str, 
